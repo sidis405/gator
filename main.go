@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/sidis405/gator/internal/database"
+	"github.com/sidis405/gator/internal/rss"
 )
 import (
 	"errors"
@@ -64,6 +65,7 @@ func main() {
 		"register": handlerRegister,
 		"reset":    handlerReset,
 		"users":    handlerUsers,
+		"agg":      handlerAgg,
 	}}
 
 	args := os.Args
@@ -154,5 +156,19 @@ func handlerUsers(s *state, cmd command) error {
 		}
 	}
 
+	return nil
+}
+
+func handlerAgg(_ *state, _ command) error {
+	ctx := context.Background()
+	const url = "https://www.wagslane.dev/index.xml"
+
+	feed, err := rss.FetchFeed(ctx, url)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(feed)
 	return nil
 }
