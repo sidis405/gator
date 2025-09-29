@@ -15,11 +15,16 @@ const getPostsForUser = `-- name: GetPostsForUser :many
 SELECT id, title, url, description, feed_id, published_at, created_at, updated_at FROM posts
 WHERE feed_id IN (
     select feed_id from feed_follows where user_id = $1
-    ) ORDER BY published_at DESC
+    ) ORDER BY published_at DESC LIMIT $2
 `
 
-func (q *Queries) GetPostsForUser(ctx context.Context, userID uuid.UUID) ([]Post, error) {
-	rows, err := q.db.QueryContext(ctx, getPostsForUser, userID)
+type GetPostsForUserParams struct {
+	UserID uuid.UUID
+	Limit  int32
+}
+
+func (q *Queries) GetPostsForUser(ctx context.Context, arg GetPostsForUserParams) ([]Post, error) {
+	rows, err := q.db.QueryContext(ctx, getPostsForUser, arg.UserID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

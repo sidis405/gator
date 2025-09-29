@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,6 +72,7 @@ func main() {
 		"follow":    middlewareLoggedIn(handlerFollow),
 		"following": middlewareLoggedIn(handlerFollowing),
 		"unfollow":  middlewareLoggedIn(handlerUnfollow),
+		"browse":    middlewareLoggedIn(handlerBrowse),
 	}}
 
 	args := os.Args
@@ -269,6 +271,33 @@ func handlerUnfollow(s *state, cmd command, currentUser database.User) error {
 
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func handlerBrowse(s *state, cmd command, currentUser database.User) error {
+	limit := 2
+	if len(cmd.arguments) > 0 {
+		tryLimit, err := strconv.Atoi(cmd.arguments[0])
+		if err == nil {
+			limit = tryLimit
+		}
+	}
+
+	ctx := context.Background()
+	posts, err := s.db.GetPostsForUser(ctx, database.GetPostsForUserParams{
+		UserID: currentUser.ID,
+		Limit:  int32(limit),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	for _, post := range posts {
+		fmt.Println(post.Title)
+		fmt.Println(post.Description)
 	}
 
 	return nil
