@@ -1,6 +1,15 @@
 package main
 
 import (
+	"context"
+	"database/sql"
+	"time"
+
+	"github.com/google/uuid"
+	_ "github.com/lib/pq"
+	"github.com/sidis405/gator/internal/database"
+)
+import (
 	"errors"
 	"fmt"
 	"os"
@@ -9,7 +18,8 @@ import (
 )
 
 type state struct {
-	c *config.Config
+	db *database.Queries
+	c  *config.Config
 }
 
 type command struct {
@@ -39,9 +49,21 @@ func main() {
 		fmt.Printf("cannot read config file: %q", err)
 		return
 	}
-	s := state{c: &c}
+
+	db, err := sql.Open("postgres", c.DbUrl)
+	if err != nil {
+		fmt.Printf("error connecting to db: %q", err)
+		return
+	}
+	s := state{
+		c:  &c,
+		db: database.New(db),
+	}
 	cmds := commands{list: map[string]func(*state, command) error{
-		"login": handlerLogin,
+		"login":    handlerLogin,
+		"register": handlerRegister,
+		"reset":    handlerReset,
+		"users":    handlerUsers,
 	}}
 
 	args := os.Args
@@ -60,17 +82,77 @@ func main() {
 		fmt.Printf("%q", err)
 		os.Exit(1)
 	}
+	os.Exit(0)
 }
 
 func handlerLogin(s *state, cmd command) error {
+	ctx := context.Background()
 	if len(cmd.arguments) == 0 {
 		return errors.New("username is required")
 	}
 	userName := cmd.arguments[0]
-	err := s.c.SetUser(userName)
+
+	_, err := s.db.GetUser(ctx, userName)
+	if err != nil {
+		return errors.New("user does not exist")
+	}
+
+	err = s.c.SetUser(userName)
 	if err != nil {
 		return err
 	}
-	fmt.Println("The user has been set to", userName)
+	fmt.Println("the user has been set to", userName)
+	return nil
+}
+
+func handlerRegister(s *state, cmd command) error {
+	if len(cmd.arguments) == 0 {
+		return errors.New("username is required")
+	}
+	userName := cmd.arguments[0]
+
+	ctx := context.Background()
+	existingUser, err := s.db.CreateUser(ctx, database.CreateUserParams{
+		ID:        uuid.New(),
+		Name:      userName,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+	if err != nil {
+		return err
+	}
+
+	s.c.SetUser(existingUser.Name)
+	fmt.Printf("the user %s was registered\n", existingUser.Name)
+	fmt.Println(existingUser)
+	return nil
+}
+
+func handlerReset(s *state, cmd command) error {
+	ctx := context.Background()
+	err := s.db.DeleteUsers(ctx)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("all users were deleted")
+	return nil
+}
+
+func handlerUsers(s *state, cmd command) error {
+	ctx := context.Background()
+	users, err := s.db.GetUsers(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, user := range users {
+		if user.Name == s.c.CurrentUserName {
+			fmt.Printf(" * %s (current)\n", user.Name)
+		} else {
+			fmt.Printf(" * %s\n", user.Name)
+		}
+	}
+
 	return nil
 }
