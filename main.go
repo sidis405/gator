@@ -66,6 +66,8 @@ func main() {
 		"reset":    handlerReset,
 		"users":    handlerUsers,
 		"agg":      handlerAgg,
+		"addfeed":  handlerAddFeed,
+		"feeds":    handlerFeeds,
 	}}
 
 	args := os.Args
@@ -170,5 +172,48 @@ func handlerAgg(_ *state, _ command) error {
 	}
 
 	fmt.Println(feed)
+	return nil
+}
+
+func handlerAddFeed(s *state, cmd command) error {
+	if len(cmd.arguments) < 2 {
+		return errors.New("usage is: addfeed name url")
+	}
+
+	ctx := context.Background()
+	currentUserName := s.c.CurrentUserName
+	currentUser, err := s.db.GetUser(ctx, currentUserName)
+	if err != nil {
+		return err
+	}
+
+	feedName := cmd.arguments[0]
+	feedUrl := cmd.arguments[1]
+
+	feed, err := s.db.CreateFeed(ctx, database.CreateFeedParams{
+		Name:      feedName,
+		Url:       feedUrl,
+		UserID:    currentUser.ID,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(feed)
+	return nil
+}
+
+func handlerFeeds(s *state, _ command) error {
+	ctx := context.Background()
+	feeds, err := s.db.FeedsWithUsers(ctx)
+	if err != nil {
+		return err
+	}
+	for _, feed := range feeds {
+		fmt.Printf(" - %s (%v) - [%s]\n", feed.Name, feed.Username.String, feed.Url)
+	}
 	return nil
 }
