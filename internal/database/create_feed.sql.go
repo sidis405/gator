@@ -23,7 +23,7 @@ VALUES ($1,
         $3,
         $4,
         $5)
-RETURNING id, name, url, user_id, created_at, updated_at
+RETURNING id, name, url, user_id, created_at, updated_at, last_fetched_at
 `
 
 type CreateFeedParams struct {
@@ -50,6 +50,7 @@ func (q *Queries) CreateFeed(ctx context.Context, arg CreateFeedParams) (Feed, e
 		&i.UserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastFetchedAt,
 	)
 	return i, err
 }

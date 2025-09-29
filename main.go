@@ -164,17 +164,20 @@ func handlerUsers(s *state, cmd command) error {
 	return nil
 }
 
-func handlerAgg(_ *state, _ command) error {
-	ctx := context.Background()
-	const url = "https://www.wagslane.dev/index.xml"
-
-	feed, err := rss.FetchFeed(ctx, url)
-
+func handlerAgg(s *state, cmd command) error {
+	if len(cmd.arguments) == 0 {
+		return errors.New("please specify interval: 1s, 1m, 1h")
+	}
+	timeBetweenRequests, err := time.ParseDuration(cmd.arguments[0])
 	if err != nil {
 		return err
 	}
 
-	fmt.Println(feed)
+	ticker := time.NewTicker(timeBetweenRequests)
+	for ; ; <-ticker.C {
+		scrapeFeeds(s)
+	}
+
 	return nil
 }
 
@@ -305,4 +308,35 @@ func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) 
 		}
 		return handler(s, cmd, currentUser)
 	}
+}
+
+func scrapeFeeds(s *state) error {
+	ctx := context.Background()
+	feed, err := s.db.GetNextFeedToFetch(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = s.db.MarkFeedAsFetched(ctx, database.MarkFeedAsFetchedParams{
+		ID:        feed.ID,
+		UpdatedAt: time.Now(),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	feedContent, err := rss.FetchFeed(ctx, feed.Url)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Sprintf("-- %v --\n", feedContent.Channel.Title)
+	for _, item := range feedContent.Channel.Item {
+		fmt.Printf(" - %v\n", item.Title)
+	}
+	return nil
+
+	return nil
 }
