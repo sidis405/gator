@@ -332,9 +332,32 @@ func scrapeFeeds(s *state) error {
 		return err
 	}
 
+	const layout = "Mon, 02 Jan 2006 15:04:05 -0700"
+
 	fmt.Sprintf("-- %v --\n", feedContent.Channel.Title)
 	for _, item := range feedContent.Channel.Item {
-		fmt.Printf(" - %v\n", item.Title)
+		pubDate, err := time.Parse(layout, item.PubDate)
+		if err != nil {
+			fmt.Printf("Error parsing date: %q\n", err)
+			println("Continuing")
+		} else {
+
+			err = s.db.CreatePost(ctx, database.CreatePostParams{
+				Title:       item.Title,
+				Url:         item.Link,
+				Description: item.Description,
+				FeedID:      feed.ID,
+				PublishedAt: pubDate,
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			})
+			if err != nil {
+				fmt.Printf("Error saving post: %q\n", err)
+				fmt.Println("Continuing")
+			} else {
+				fmt.Printf("Imported - %v\n", item.Title)
+			}
+		}
 	}
 	return nil
 
