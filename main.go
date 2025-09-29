@@ -61,13 +61,15 @@ func main() {
 		db: database.New(db),
 	}
 	cmds := commands{list: map[string]func(*state, command) error{
-		"login":    handlerLogin,
-		"register": handlerRegister,
-		"reset":    handlerReset,
-		"users":    handlerUsers,
-		"agg":      handlerAgg,
-		"addfeed":  handlerAddFeed,
-		"feeds":    handlerFeeds,
+		"login":     handlerLogin,
+		"register":  handlerRegister,
+		"reset":     handlerReset,
+		"users":     handlerUsers,
+		"agg":       handlerAgg,
+		"addfeed":   handlerAddFeed,
+		"feeds":     handlerFeeds,
+		"follow":    handlerFollow,
+		"following": handlerFollowing,
 	}}
 
 	args := os.Args
@@ -181,8 +183,7 @@ func handlerAddFeed(s *state, cmd command) error {
 	}
 
 	ctx := context.Background()
-	currentUserName := s.c.CurrentUserName
-	currentUser, err := s.db.GetUser(ctx, currentUserName)
+	currentUser, err := getCurrentUser(s, ctx)
 	if err != nil {
 		return err
 	}
@@ -194,6 +195,17 @@ func handlerAddFeed(s *state, cmd command) error {
 		Name:      feedName,
 		Url:       feedUrl,
 		UserID:    currentUser.ID,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.CreateFeedFollow(ctx, database.CreateFeedFollowParams{
+		UserID:    currentUser.ID,
+		FeedID:    feed.ID,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	})
@@ -216,4 +228,57 @@ func handlerFeeds(s *state, _ command) error {
 		fmt.Printf(" - %s (%v) - [%s]\n", feed.Name, feed.Username.String, feed.Url)
 	}
 	return nil
+}
+
+func handlerFollow(s *state, cmd command) error {
+	if len(cmd.arguments) == 0 {
+		return errors.New("url is required")
+	}
+	ctx := context.Background()
+	currentUser, err := getCurrentUser(s, ctx)
+	if err != nil {
+		return err
+	}
+
+	feed, err := s.db.GetFeed(ctx, cmd.arguments[0])
+	if err != nil {
+		return err
+	}
+
+	newFeedFollow, err := s.db.CreateFeedFollow(ctx, database.CreateFeedFollowParams{
+		UserID:    currentUser.ID,
+		FeedID:    feed.ID,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+
+	fmt.Printf("now you (%s) are following %s\n", newFeedFollow.UserName, newFeedFollow.FeedName)
+
+	return nil
+}
+
+func handlerFollowing(s *state, cmd command) error {
+	ctx := context.Background()
+	currentUser, err := getCurrentUser(s, ctx)
+	if err != nil {
+		return err
+	}
+	following, err := s.db.GetFeedFollowsForUser(ctx, currentUser.ID)
+	if err != nil {
+		return err
+	}
+	for _, feed := range following {
+		fmt.Printf(" - %s - by %s\n", feed.FeedName, feed.UserName)
+	}
+
+	return nil
+}
+
+func getCurrentUser(s *state, ctx context.Context) (database.User, error) {
+	currentUserName := s.c.CurrentUserName
+	currentUser, err := s.db.GetUser(ctx, currentUserName)
+	if err != nil {
+		return database.User{}, err
+	}
+	return currentUser, nil
 }
