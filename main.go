@@ -66,10 +66,10 @@ func main() {
 		"reset":     handlerReset,
 		"users":     handlerUsers,
 		"agg":       handlerAgg,
-		"addfeed":   handlerAddFeed,
+		"addfeed":   middlewareLoggedIn(handlerAddFeed),
 		"feeds":     handlerFeeds,
-		"follow":    handlerFollow,
-		"following": handlerFollowing,
+		"follow":    middlewareLoggedIn(handlerFollow),
+		"following": middlewareLoggedIn(handlerFollowing),
 	}}
 
 	args := os.Args
@@ -177,16 +177,12 @@ func handlerAgg(_ *state, _ command) error {
 	return nil
 }
 
-func handlerAddFeed(s *state, cmd command) error {
+func handlerAddFeed(s *state, cmd command, currentUser database.User) error {
 	if len(cmd.arguments) < 2 {
 		return errors.New("usage is: addfeed name url")
 	}
 
 	ctx := context.Background()
-	currentUser, err := getCurrentUser(s, ctx)
-	if err != nil {
-		return err
-	}
 
 	feedName := cmd.arguments[0]
 	feedUrl := cmd.arguments[1]
@@ -230,16 +226,11 @@ func handlerFeeds(s *state, _ command) error {
 	return nil
 }
 
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, currentUser database.User) error {
 	if len(cmd.arguments) == 0 {
 		return errors.New("url is required")
 	}
 	ctx := context.Background()
-	currentUser, err := getCurrentUser(s, ctx)
-	if err != nil {
-		return err
-	}
-
 	feed, err := s.db.GetFeed(ctx, cmd.arguments[0])
 	if err != nil {
 		return err
@@ -257,12 +248,8 @@ func handlerFollow(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollowing(s *state, cmd command) error {
+func handlerFollowing(s *state, _ command, currentUser database.User) error {
 	ctx := context.Background()
-	currentUser, err := getCurrentUser(s, ctx)
-	if err != nil {
-		return err
-	}
 	following, err := s.db.GetFeedFollowsForUser(ctx, currentUser.ID)
 	if err != nil {
 		return err
@@ -276,9 +263,23 @@ func handlerFollowing(s *state, cmd command) error {
 
 func getCurrentUser(s *state, ctx context.Context) (database.User, error) {
 	currentUserName := s.c.CurrentUserName
+	if currentUserName == "" {
+		return database.User{}, errors.New("no user logged in; run login <username>")
+	}
 	currentUser, err := s.db.GetUser(ctx, currentUserName)
 	if err != nil {
 		return database.User{}, err
 	}
 	return currentUser, nil
+}
+
+func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
+	return func(s *state, cmd command) error {
+		ctx := context.Background()
+		currentUser, err := getCurrentUser(s, ctx)
+		if err != nil {
+			return err
+		}
+		return handler(s, cmd, currentUser)
+	}
 }
