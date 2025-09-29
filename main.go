@@ -70,6 +70,7 @@ func main() {
 		"feeds":     handlerFeeds,
 		"follow":    middlewareLoggedIn(handlerFollow),
 		"following": middlewareLoggedIn(handlerFollowing),
+		"unfollow":  middlewareLoggedIn(handlerUnfollow),
 	}}
 
 	args := os.Args
@@ -244,6 +245,28 @@ func handlerFollow(s *state, cmd command, currentUser database.User) error {
 	})
 
 	fmt.Printf("now you (%s) are following %s\n", newFeedFollow.UserName, newFeedFollow.FeedName)
+
+	return nil
+}
+
+func handlerUnfollow(s *state, cmd command, currentUser database.User) error {
+	if len(cmd.arguments) == 0 {
+		return errors.New("url is required")
+	}
+	ctx := context.Background()
+	feed, err := s.db.GetFeed(ctx, cmd.arguments[0])
+	if err != nil {
+		return err
+	}
+
+	err = s.db.DeleteFeedFollow(ctx, database.DeleteFeedFollowParams{
+		UserID: currentUser.ID,
+		FeedID: feed.ID,
+	})
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
